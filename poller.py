@@ -10,6 +10,7 @@ for a real checkpoint, so the deploy skeleton can be validated on demand.
 """
 import argparse
 import json
+import logging
 import os
 import urllib.parse
 import urllib.request
@@ -19,6 +20,9 @@ from pathlib import Path
 UTC = timezone.utc
 SCHEDULE_PATH = Path(__file__).parent / "data" / "schedule.json"
 CHECK_WINDOW = timedelta(minutes=10)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("poller")
 
 
 def send_telegram_message(text):
@@ -53,23 +57,24 @@ def main():
 
     if args.test == "fire":
         send_telegram_message("[TEST] Poller fired (forced test-fire case).")
-        print("Test fire sent.")
+        logger.info("Test fire sent.")
         return
     if args.test == "nofire":
-        print("Test no-fire case: intentionally not sending a message.")
+        logger.info("Test no-fire case: intentionally not sending a message.")
         return
 
     now = datetime.now(UTC)
     due = due_checkpoints(now)
     if not due:
-        print(f"No checkpoints due at {now.isoformat()}. No-op.")
+        logger.info("No checkpoints due at %s. No-op.", now.isoformat())
         return
 
     for week_num, cp in due:
+        logger.info("Found due checkpoint: week=%s label=%s at=%s", week_num, cp["label"], cp["at"])
         send_telegram_message(
             f"[Week {week_num}] Lineup check due ({cp['label']}) — poller skeleton test."
         )
-        print(f"Fired for week {week_num} checkpoint at {cp['at']}")
+        logger.info("Fired for week %s checkpoint at %s", week_num, cp["at"])
 
 
 if __name__ == "__main__":
