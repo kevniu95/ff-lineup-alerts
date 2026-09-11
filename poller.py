@@ -2,8 +2,14 @@
 Minimal poller skeleton: checks data/schedule.json for any checkpoint due
 right now and sends a Telegram message if so; otherwise no-ops.
 
-Intended to run on a Railway cron schedule (e.g. every 15 minutes) with
-CHECK_WINDOW wide enough to not miss a checkpoint between runs.
+Intended to run on a Railway cron schedule at a fixed interval. A checkpoint
+fires on the first tick at or after its "at" time, within CHECK_WINDOW --
+i.e. 0 <= (at - now) < CHECK_WINDOW. This is forward-only (a checkpoint
+already in the past is never worth firing on) and, as long as CHECK_WINDOW
+equals the cron interval, guarantees exactly one tick catches each
+checkpoint: no misses, no duplicates. (If CHECK_WINDOW were symmetric --
+checking |at - now| instead -- checkpoints near the midpoint between two
+ticks could be caught by both, firing twice.)
 
 --test fire / --test nofire force a message send / no-op without waiting
 for a real checkpoint, so the deploy skeleton can be validated on demand.
@@ -19,7 +25,7 @@ from pathlib import Path
 
 UTC = timezone.utc
 SCHEDULE_PATH = Path(__file__).parent / "data" / "schedule.json"
-CHECK_WINDOW = timedelta(minutes=10)
+CHECK_WINDOW = timedelta(minutes=60)  # keep equal to the Railway cron interval
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("poller")
@@ -41,7 +47,7 @@ def due_checkpoints(now):
     for week in schedule["weeks"]:
         for cp in week["checkpoints"]:
             at = datetime.fromisoformat(cp["at"])
-            if abs(at - now) <= CHECK_WINDOW:
+            if timedelta(0) <= (at - now) < CHECK_WINDOW:
                 due.append((week["week"], cp))
     return due
 
