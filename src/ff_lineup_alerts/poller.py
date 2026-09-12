@@ -24,7 +24,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 UTC = timezone.utc
-SCHEDULE_PATH = Path(__file__).parent / "data" / "schedule.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCHEDULE_PATH = REPO_ROOT / "data" / "schedule.json"
 CHECK_WINDOW = timedelta(minutes=60)  # keep equal to the Railway cron interval
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
