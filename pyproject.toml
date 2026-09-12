@@ -1,0 +1,20 @@
+[project]
+name = "ff-lineup-alerts"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "kevniu95", email = "kniu@uchicago.edu" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=1.5.0",
+    "openai>=3.13.0",
+]
+
+[project.scripts]
+ff-lineup-alerts = "ff_lineup_alerts:main"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
