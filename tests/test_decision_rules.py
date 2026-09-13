@@ -12,7 +12,7 @@ from ff_lineup_alerts.decision_rules import (
     check_starter_out,
     run_all,
 )
-from ff_lineup_alerts.espn_client import LineupSlot, RosterPlayer, TeamState
+from ff_lineup_alerts.league import LineupSlot, RosterPlayer, TeamState
 
 FLEX_SLOTS = ["WR", "RB/WR", "WR/TE", "RB/WR/TE", "BE"]
 

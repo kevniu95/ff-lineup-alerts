@@ -12,42 +12,30 @@ projected_total_points, and bye weeks would need deriving from .schedule).
 """
 import logging
 import os
-from dataclasses import dataclass
 
 from espn_api.football import League
+
+from ff_lineup_alerts.league import LineupSlot, RosterPlayer, TeamState
 
 logger = logging.getLogger("espn_client")
 
 BENCH_SLOTS = {"BE", "IR"}
 
-
-@dataclass
-class RosterPlayer:
-    name: str
-    status: str  # raw ESPN injuryStatus string, e.g. "ACTIVE", "OUT", "QUESTIONABLE"
-    on_bye: bool
-    has_played: bool  # this week's game is over (or well underway) for this player
-    projection: float
-    eligible_slots: list[str]
+# ESPN's own injuryStatus strings already match league.py's canonical
+# vocabulary for player status ("ACTIVE", "OUT", "QUESTIONABLE", etc.) --
+# the one known exception is D/ST entries, which ESPN reports as "NORMAL"
+# rather than "ACTIVE".
+STATUS_MAP = {"NORMAL": "ACTIVE"}
 
 
-@dataclass
-class LineupSlot:
-    slot: str
-    player: RosterPlayer | None  # None means the slot is empty
-
-
-@dataclass
-class TeamState:
-    week: int
-    lineup: list[LineupSlot]
-    bench: list[RosterPlayer]
+def _normalize_status(raw_status: str) -> str:
+    return STATUS_MAP.get(raw_status, raw_status)
 
 
 def _to_roster_player(bp) -> RosterPlayer:
     return RosterPlayer(
         name=bp.name,
-        status=bp.injuryStatus,
+        status=_normalize_status(bp.injuryStatus),
         on_bye=bp.on_bye_week,
         # espn-api's game_played is really a binary "kickoff + 3hrs has passed"
         # flag despite the 0-100 "percent of game played" naming.
