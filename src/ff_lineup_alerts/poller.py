@@ -152,7 +152,7 @@ def format_alerts_message(league_name: str, week: int, outcomes: list[AlertOutco
             lines += ["", "Failed to apply:"] + _numbered(failed, lambda o: f" -- error: {o.error}")
         if unsupported:
             # e.g. Sleeper, which has no public write API to apply this through.
-            lines += ["", "Not supported (write-path not built for this platform):"] + _numbered(unsupported)
+            lines += ["", "Not supported"] + _numbered(unsupported)
 
     if suggest:
         lines += ["", SECTION_RULE, "Suggested Fixes", SECTION_RULE, ""]
