@@ -122,6 +122,19 @@ moving to the next.
     ESPN/Sleeper (`client.team_link`), so acting on an alert doesn't
     require first navigating there by hand.
 
+- **Fix ESPN empty-slot detection** (`src/ff_lineup_alerts/espn_client.py`)
+  - Found while manually testing a real live lineup ahead of the write-path
+    work (step 3 below): ESPN's `box_scores()` never emits a placeholder
+    entry for a starting slot with no player assigned — it just returns
+    fewer lineup entries than the league's configured slot counts. The old
+    `bp.name == ""` check `get_team_state` used to detect this was dead
+    code that never matched anything real.
+  - `get_team_state` now reads `league.settings.position_slot_counts` (the
+    league's expected starter count per slot label), diffs it against how
+    many are actually filled, and synthesizes the missing `LineupSlot`s
+    (`player=None`) itself — which is what `check_empty_slot` actually
+    needs to fire correctly.
+
 ## Plan
 
 1. **Data clients**
