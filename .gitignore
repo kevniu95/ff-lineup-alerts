@@ -3,4 +3,4 @@ TODO
 .venv/
 __pycache__/
 cheatsheet.md
-sleeper_players.json
+data/cache/*

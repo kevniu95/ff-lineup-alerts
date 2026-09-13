@@ -96,18 +96,42 @@ moving to the next.
   - Verified against real Sleeper data via
     `scripts/spike_decision_rules_sleeper.py` (mirrors the ESPN spike).
 
+- **Poller wired to both leagues** (`src/ff_lineup_alerts/poller.py`)
+  - `LEAGUE_BUILDERS` lists each platform's client factory + the env var
+    that gates whether it's configured; `configured_leagues()` filters to
+    whichever are actually set up, so running with just one platform
+    doesn't error. Adding a future platform is just one more list entry.
+  - On a due checkpoint, runs every configured league's check and sends a
+    Telegram message per league with alerts (silent otherwise, per
+    scope.md); auto-fix alerts are labeled as not-yet-applied since the
+    write-path (step 3 below) doesn't exist yet.
+  - All leagues currently share one Telegram bot/chat, each message
+    prefixed `[ESPN]`/`[Sleeper]` — scope.md's longer-term design is a
+    separate bot/thread per league; deferred until that's actually needed.
+  - `--test espn` / `--test sleeper` / `--test check` added to run one or
+    all configured leagues' real checks immediately, bypassing the
+    schedule — confirmed real end-to-end Telegram delivery for both
+    leagues this way.
+  - `tests/test_poller.py` covers message formatting and league-gating
+    logic (pure, no network); `run_league_check` itself stays validated by
+    hand via `--test`, same reasoning as the league clients.
+  - `.env` is now auto-loaded via `python-dotenv` at poller startup, so
+    local runs pick up league/bot credentials without manually exporting
+    them into the shell first.
+  - Each alert message ends with a link straight to the team's page on
+    ESPN/Sleeper (`client.team_link`), so acting on an alert doesn't
+    require first navigating there by hand.
+
 ## Plan
 
 1. **Data clients**
-   - Sleeper client pulling real roster/matchup/injury data (ESPN's is done,
-     above). Sleeper's known extra complexity: bye weeks and projections come
-     from separate undocumented endpoints, and the 14MB player dump needs a
-     Railway Volume cache (see scope.md's open questions).
+   - ESPN and Sleeper clients both done (above), sharing `league.py`'s
+     interface, and both wired into the poller.
 2. **Decision rules**
-   - ESPN-only implementation is done (above). Extend to Sleeper once its
-     client exists, or ship ESPN-only first if that unblocks value sooner.
-   - Wire alerts into the poller: auto-fix sends an FYI; suggest-only sends
-     tap buttons over the same Telegram bot.
+   - Implemented against the shared `TeamState` interface (above) — already
+     platform-neutral. Alerts are wired into the poller and sent over
+     Telegram (above); tap-to-approve buttons still depend on step 4's
+     webhook handler.
 3. **Write-path**
    - Implement the "execute this swap" library function itself (the shared
      core-library action from scope.md's architecture) against ESPN/Sleeper's
