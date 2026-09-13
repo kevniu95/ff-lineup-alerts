@@ -26,6 +26,7 @@ BASE = "https://api.sleeper.app/v1"
 # (no Volume, no env var), falls back to the repo's data/cache/ dir, which
 # is fine there since it's not wiped between manual runs the way a fresh
 # Railway cron container would be.
+USING_VOLUME = bool(os.environ.get("RAILWAY_VOLUME_MOUNT_PATH"))
 CACHE_DIR = Path(os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or Path(__file__).resolve().parents[2] / "data" / "cache")
 PLAYERS_CACHE = CACHE_DIR / "sleeper_players.json"
 PLAYERS_CACHE_META = CACHE_DIR / "sleeper_players.meta.json"
@@ -91,10 +92,16 @@ def _load_players() -> dict:
     if _cache_is_fresh():
         fetched_at = datetime.fromisoformat(json.loads(PLAYERS_CACHE_META.read_text())["fetched_at"])
         age = datetime.now(timezone.utc) - fetched_at
-        logger.debug("Sleeper player cache hit (age=%s, path=%s)", age, PLAYERS_CACHE)
+        logger.info(
+            "Sleeper player cache HIT (age=%s, volume=%s, path=%s)",
+            age, USING_VOLUME, PLAYERS_CACHE,
+        )
         return json.loads(PLAYERS_CACHE.read_text())
 
-    logger.info("Sleeper player cache missing or stale, re-fetching from %s", CACHE_DIR)
+    logger.info(
+        "Sleeper player cache MISS (missing or older than %s), re-fetching (volume=%s, path=%s)",
+        CACHE_MAX_AGE, USING_VOLUME, CACHE_DIR,
+    )
     resp = requests.get(f"{BASE}/players/nfl")
     resp.raise_for_status()
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
