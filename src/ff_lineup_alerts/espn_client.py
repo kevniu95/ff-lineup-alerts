@@ -79,10 +79,23 @@ class EspnClient:
             if bp.slot_position in BENCH_SLOTS:
                 bench.append(_to_roster_player(bp))
                 continue
-            if bp.name == "":
-                lineup.append(LineupSlot(slot=bp.slot_position, player=None))
-                continue
             lineup.append(LineupSlot(slot=bp.slot_position, player=_to_roster_player(bp)))
+
+        # ESPN doesn't emit a placeholder entry for a starting slot with no
+        # player assigned -- box_scores() just returns fewer lineup entries
+        # than the league's configured starting-slot counts. Diff actual
+        # counts per slot label against league.settings.position_slot_counts
+        # to find those and append the missing (empty) slots ourselves.
+        starting_slot_counts = {
+            slot: count for slot, count in self.league.settings.position_slot_counts.items()
+            if slot and slot not in BENCH_SLOTS and count
+        }
+        filled_counts: dict[str, int] = {}
+        for entry in lineup:
+            filled_counts[entry.slot] = filled_counts.get(entry.slot, 0) + 1
+        for slot_label, expected_count in starting_slot_counts.items():
+            missing = expected_count - filled_counts.get(slot_label, 0)
+            lineup.extend(LineupSlot(slot=slot_label, player=None) for _ in range(missing))
 
         logger.info(
             "Fetched ESPN team state: week=%s starters=%d bench=%d",
