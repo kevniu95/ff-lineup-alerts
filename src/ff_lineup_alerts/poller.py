@@ -82,29 +82,63 @@ def send_telegram_message(text):
         return json.load(resp)
 
 
+@dataclass
+class AlertOutcome:
+    alert: Alert
+    applied: bool
+    error: str | None = None  # set only when an apply_swap attempt actually failed
+
+
+def _apply_auto_alerts(client, week: int, alerts: list[Alert]) -> list[AlertOutcome]:
+    """
+    Executes every AUTO alert immediately via client.apply_swap, if the
+    platform's client supports it (ESPN today; Sleeper has no public write
+    API -- see docs/scope.md). SUGGEST alerts are never auto-applied.
+    """
+    outcomes = []
+    for alert in alerts:
+        if alert.kind != AlertKind.AUTO or not hasattr(client, "apply_swap"):
+            outcomes.append(AlertOutcome(alert=alert, applied=False))
+            continue
+        try:
+            client.apply_swap(week, alert.slot, alert.starter, alert.replacement)
+            outcomes.append(AlertOutcome(alert=alert, applied=True))
+        except Exception as e:
+            logger.exception("Failed to apply auto swap for rule %s", alert.rule)
+            outcomes.append(AlertOutcome(alert=alert, applied=False, error=str(e)))
+    return outcomes
+
+
 def _format_alert_line(alert: Alert) -> str:
     starter = alert.starter.name if alert.starter else "(empty slot)"
     replacement = alert.replacement.name if alert.replacement else "(no eligible replacement)"
     return f"- {alert.slot}: {starter} -> {replacement} [{alert.reason}]"
 
 
-def format_alerts_message(league_name: str, week: int, alerts: list[Alert], team_link: str) -> str | None:
+def format_alerts_message(league_name: str, week: int, outcomes: list[AlertOutcome], team_link: str) -> str | None:
     """None means silent -- nothing worth notifying about, per scope.md."""
-    if not alerts:
+    if not outcomes:
         return None
 
-    auto = [a for a in alerts if a.kind == AlertKind.AUTO]
-    suggest = [a for a in alerts if a.kind == AlertKind.SUGGEST]
+    applied = [o for o in outcomes if o.alert.kind == AlertKind.AUTO and o.applied]
+    failed = [o for o in outcomes if o.alert.kind == AlertKind.AUTO and not o.applied and o.error is not None]
+    unsupported = [o for o in outcomes if o.alert.kind == AlertKind.AUTO and not o.applied and o.error is None]
+    suggest = [o for o in outcomes if o.alert.kind == AlertKind.SUGGEST]
 
     lines = [f"[{league_name}] Week {week} lineup check"]
-    if auto:
-        # The write-path ("execute this swap") isn't built yet -- these are
-        # detected, not actually applied. Don't claim otherwise.
-        lines.append("\nAuto-fix candidates (not yet auto-applied -- write-path not built):")
-        lines.extend(_format_alert_line(a) for a in auto)
+    if applied:
+        lines.append("\nAuto-fix applied:")
+        lines.extend(_format_alert_line(o.alert) for o in applied)
+    if failed:
+        lines.append("\nAuto-fix FAILED (needs manual action):")
+        lines.extend(f"{_format_alert_line(o.alert)} -- error: {o.error}" for o in failed)
+    if unsupported:
+        # e.g. Sleeper, which has no public write API to apply this through.
+        lines.append("\nAuto-fix candidates (this platform's write-path isn't built):")
+        lines.extend(_format_alert_line(o.alert) for o in unsupported)
     if suggest:
         lines.append("\nSuggested (tap-to-approve not wired up yet):")
-        lines.extend(_format_alert_line(a) for a in suggest)
+        lines.extend(_format_alert_line(o.alert) for o in suggest)
     lines.append(f"\n{team_link}")
     return "\n".join(lines)
 
@@ -113,7 +147,8 @@ def run_league_check(league: LeagueConfig) -> str | None:
     client = league.build_client()
     state = client.get_team_state()
     alerts = run_all(state)
-    return format_alerts_message(league.name, state.week, alerts, client.team_link)
+    outcomes = _apply_auto_alerts(client, state.week, alerts)
+    return format_alerts_message(league.name, state.week, outcomes, client.team_link)
 
 
 def due_checkpoints(now):

@@ -1,10 +1,12 @@
 """
-Unit tests for poller.py's pure logic: message formatting and league
-configuration gating. run_league_check itself hits real league APIs, so it's
-validated by hand via --test espn/sleeper/check instead (see README.md).
+Unit tests for poller.py's pure logic: message formatting, auto-alert
+execution, and league configuration gating. run_league_check itself hits
+real league APIs, so it's validated by hand via --test espn/sleeper/check
+instead (see README.md).
 """
 from ff_lineup_alerts import poller
 from ff_lineup_alerts.decision_rules import Alert, AlertKind
+from ff_lineup_alerts.poller import AlertOutcome
 
 
 def make_alert(kind, rule="some_rule", slot="WR", starter_name="Starter", replacement_name="Replacement"):
@@ -13,21 +15,87 @@ def make_alert(kind, rule="some_rule", slot="WR", starter_name="Starter", replac
     return Alert(kind=kind, rule=rule, slot=slot, starter=starter, replacement=replacement, reason="because")
 
 
-def test_format_alerts_message_returns_none_when_no_alerts():
-    assert poller.format_alerts_message("ESPN", 3, []) is None
+def test_format_alerts_message_returns_none_when_no_outcomes():
+    assert poller.format_alerts_message("ESPN", 3, [], "https://example.com/team") is None
 
 
 def test_format_alerts_message_labels_league_and_week():
-    message = poller.format_alerts_message("ESPN", 3, [make_alert(AlertKind.AUTO)])
+    outcomes = [AlertOutcome(alert=make_alert(AlertKind.AUTO), applied=True)]
+    message = poller.format_alerts_message("ESPN", 3, outcomes, "https://example.com/team")
     assert message.startswith("[ESPN] Week 3 lineup check")
 
 
-def test_format_alerts_message_separates_auto_and_suggest():
-    alerts = [make_alert(AlertKind.AUTO, rule="starter_out"), make_alert(AlertKind.SUGGEST, rule="questionable_doubtful")]
-    message = poller.format_alerts_message("Sleeper", 1, alerts)
+def test_format_alerts_message_separates_applied_unsupported_and_suggest():
+    outcomes = [
+        AlertOutcome(alert=make_alert(AlertKind.AUTO, rule="starter_out"), applied=True),
+        AlertOutcome(alert=make_alert(AlertKind.AUTO, rule="starter_on_bye"), applied=False),
+        AlertOutcome(alert=make_alert(AlertKind.SUGGEST, rule="questionable_doubtful"), applied=False),
+    ]
+    message = poller.format_alerts_message("Sleeper", 1, outcomes, "https://example.com/team")
+    assert "Auto-fix applied" in message
     assert "Auto-fix candidates" in message
     assert "Suggested" in message
-    assert message.index("Auto-fix candidates") < message.index("Suggested")
+    assert message.index("Auto-fix applied") < message.index("Auto-fix candidates") < message.index("Suggested")
+
+
+def test_format_alerts_message_reports_failed_auto_alert():
+    outcomes = [AlertOutcome(alert=make_alert(AlertKind.AUTO), applied=False, error="boom")]
+    message = poller.format_alerts_message("ESPN", 3, outcomes, "https://example.com/team")
+    assert "Auto-fix FAILED" in message
+    assert "boom" in message
+
+
+def test_format_alerts_message_includes_team_link():
+    outcomes = [AlertOutcome(alert=make_alert(AlertKind.AUTO), applied=True)]
+    message = poller.format_alerts_message("ESPN", 3, outcomes, "https://example.com/team")
+    assert message.endswith("https://example.com/team")
+
+
+class _ClientWithApplySwap:
+    def __init__(self, should_fail=False):
+        self.should_fail = should_fail
+        self.calls = []
+
+    def apply_swap(self, week, slot, starter, replacement):
+        self.calls.append((week, slot, starter, replacement))
+        if self.should_fail:
+            raise RuntimeError("boom")
+
+
+class _ClientWithoutApplySwap:
+    pass
+
+
+def test_apply_auto_alerts_executes_auto_alerts_when_supported():
+    client = _ClientWithApplySwap()
+    alert = make_alert(AlertKind.AUTO)
+    outcomes = poller._apply_auto_alerts(client, 3, [alert])
+    assert outcomes == [AlertOutcome(alert=alert, applied=True)]
+    assert client.calls == [(3, alert.slot, alert.starter, alert.replacement)]
+
+
+def test_apply_auto_alerts_skips_suggest_alerts():
+    client = _ClientWithApplySwap()
+    alert = make_alert(AlertKind.SUGGEST)
+    outcomes = poller._apply_auto_alerts(client, 3, [alert])
+    assert outcomes == [AlertOutcome(alert=alert, applied=False)]
+    assert client.calls == []
+
+
+def test_apply_auto_alerts_marks_unsupported_when_client_lacks_apply_swap():
+    client = _ClientWithoutApplySwap()
+    alert = make_alert(AlertKind.AUTO)
+    outcomes = poller._apply_auto_alerts(client, 3, [alert])
+    assert outcomes == [AlertOutcome(alert=alert, applied=False, error=None)]
+
+
+def test_apply_auto_alerts_captures_error_on_failure():
+    client = _ClientWithApplySwap(should_fail=True)
+    alert = make_alert(AlertKind.AUTO)
+    outcomes = poller._apply_auto_alerts(client, 3, [alert])
+    assert len(outcomes) == 1
+    assert outcomes[0].applied is False
+    assert outcomes[0].error == "boom"
 
 
 def test_configured_leagues_only_includes_leagues_with_env_set(monkeypatch):
