@@ -24,6 +24,7 @@ import argparse
 import json
 import logging
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ from typing import Callable
 from ff_lineup_alerts.decision_rules import Alert, AlertKind, run_all
 from ff_lineup_alerts.espn_client import EspnClient
 from ff_lineup_alerts.league import LeagueClient
+from ff_lineup_alerts.logging_config import configure_logging
 from ff_lineup_alerts.sleeper_client import SleeperClient
 
 UTC = timezone.utc
@@ -45,7 +47,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEDULE_PATH = REPO_ROOT / "data" / "schedule.json"
 CHECK_WINDOW = timedelta(minutes=60)  # keep equal to the Railway cron interval
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+configure_logging()
 logger = logging.getLogger("poller")
 
 
@@ -70,6 +72,8 @@ def configured_leagues() -> list[LeagueConfig]:
     leagues = [lc for lc in LEAGUE_BUILDERS if os.environ.get(lc.required_env)]
     if not leagues:
         logger.warning("No leagues configured (no ESPN_LEAGUE_ID or SLEEPER_LEAGUE_ID in env).")
+    else:
+        logger.debug("Configured leagues: %s", [lc.name for lc in leagues])
     return leagues
 
 
@@ -78,8 +82,14 @@ def send_telegram_message(text):
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     data = urllib.parse.urlencode({"chat_id": chat_id, "text": text}).encode()
-    with urllib.request.urlopen(url, data=data) as resp:
-        return json.load(resp)
+    try:
+        with urllib.request.urlopen(url, data=data) as resp:
+            result = json.load(resp)
+    except urllib.error.URLError:
+        logger.exception("Telegram send failed (chat_id=%s)", chat_id)
+        raise
+    logger.info("Telegram message sent (chat_id=%s, message_id=%s)", chat_id, result.get("result", {}).get("message_id"))
+    return result
 
 
 @dataclass

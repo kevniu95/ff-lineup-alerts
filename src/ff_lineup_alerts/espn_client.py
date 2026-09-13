@@ -164,6 +164,12 @@ class EspnClient:
             "items": items,
         }
         url = TRANSACTIONS_URL.format(year=self.year, league_id=self.league_id)
+        # memberId (SWID) is authentication, not something to log even at
+        # DEBUG -- log everything else about the request instead.
+        logger.debug(
+            "ESPN transaction request: url=%s teamId=%s scoringPeriodId=%s items=%s",
+            url, self.team_id, week, items,
+        )
         resp = requests.post(
             url,
             json=body,
@@ -171,6 +177,7 @@ class EspnClient:
         )
         resp.raise_for_status()
         result = resp.json()
+        logger.debug("ESPN transaction response: %s", result)
         logger.info(
             "Applied ESPN swap: slot=%s starter=%s replacement=%s status=%s",
             slot, starter.name if starter else None, replacement.name, result.get("status"),
