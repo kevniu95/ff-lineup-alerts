@@ -18,17 +18,36 @@ the obvious cases, and lets me ask open-ended lineup questions from my phone.
   suggested roster action directly.
 
 ## Autonomy — what auto-executes vs. what waits for a tap
+Split rule: **auto** = deterministic, no judgment call (the starter is simply
+wrong); **suggest** = anything requiring a projection/judgment comparison, or a
+signal that isn't officially confirmed yet.
+
 **Auto-fix (no confirmation needed, FYI notification after):**
-- Starter is on a bye week AND a bench player is active at that same eligible slot
-  with a nonzero projection.
-- Starter is officially "OUT"/inactive AND a bench player is active at that same
-  eligible slot with a nonzero projection.
+
+| Rule | Trigger | Data needed |
+|---|---|---|
+| Starter on bye | Starter's NFL team has a bye this week, AND a bench player is active at that same eligible slot with nonzero projection | Roster/lineup, bye-week schedule, position eligibility, projections |
+| Starter Out/IR/Suspended | Starter's official status is Out/IR/Suspended, AND a bench player is active at that same eligible slot with nonzero projection | Roster/lineup, official player status field, position eligibility, projections |
+| Empty starting slot | A starting lineup slot has no player assigned | Roster/lineup |
 
 **Suggest only (requires a tap, never auto-applied):**
-- Anything comparing two active/playing players by projection alone.
-- Questionable / doubtful statuses — surfaced as info, not auto-swapped.
-- Any swap that would need a slot the bench player isn't actually eligible for
-  (auto-fix logic must check eligibility, not just "any bench player").
+
+| Rule | Trigger | Data needed |
+|---|---|---|
+| Better projected points on bench | A bench player eligible for a starter's slot has a meaningfully higher weekly projection | Roster/lineup, projections, position eligibility |
+| Questionable/Doubtful starter | Starter's official status is Questionable/Doubtful | Roster/lineup, official player status field |
+| Last-minute inactive, not yet officially "Out" | Signal that a starter is likely inactive before the official status field reflects it | Roster/lineup, a real-time inactive-list source faster than official status (availability TBD — see Open questions) |
+
+The last one started as a candidate for auto (it's the scariest miss — starter
+sits and we never caught it), but moved to suggest: by definition the official
+status hasn't caught up yet, so it can't be detected the same deterministic way
+as the other auto rules, and would depend on a less authoritative source. Worth
+revisiting as auto-alert (loud notify) vs. auto-swap once we know what data's
+actually available in time.
+
+Also: any auto-fix swap must check slot eligibility, not just "any bench
+player" — a bench player isn't a valid replacement unless eligible for the
+starter's specific slot.
 
 ## Trigger schedule
 - Season has a fixed number of weeks and each week has fixed game days, so checks
@@ -74,6 +93,28 @@ and the manual-approve path can never drift apart.
 Sleeper, `python-telegram-bot` for the bot side, an LLM API for open-chat.
 
 ## Open questions / not yet decided
+- **Projection freshness/reliability for the "better projected points on
+  bench" suggest rule.** Both ESPN's and Sleeper's projections come from
+  their own black-box models (Sleeper's via an undocumented endpoint, see
+  below) — unclear how responsive either actually is to in-week news
+  (depth-chart shifts, questionable tags trending toward sitting, etc.)
+  rather than being a stale pre-season/early-week number. Worth exploring an
+  **independent third-party check** as an additional gate before firing this
+  suggestion — e.g. a separate projections provider, or something derived
+  from sportsbook prop lines (often faster to move on real news than fantasy
+  projection models) as a simpler proxy. Not yet decided whether this becomes
+  a hard requirement or a nice-to-have cross-check. Revisit when implementing
+  rule (2) from build-plan.md.
+- **Sleeper player-data caching under Railway's cron model.** Sleeper's
+  `/v1/players/nfl` player-metadata dump is ~14MB and Sleeper asks it not be
+  pulled more than once/day. But Railway cron-scheduled services spin up a
+  fresh container per firing — there's no long-lived process, so a plain
+  local-file cache would be wiped between every checkpoint, not just across
+  redeploys. Current leaning: use a **Railway Volume** attached to the poller
+  service so the cache file (+ a last-fetched timestamp) survives across cron
+  firings, rather than pushing the cache to external storage or just eating
+  the re-pull cost every run. Revisit once the Sleeper client is actually
+  being built.
 - Precise auto-fix eligibility-checking logic (slot compatibility rules per
   platform).
 - How ESPN cookie refresh gets triggered/reminded (manual for now).
