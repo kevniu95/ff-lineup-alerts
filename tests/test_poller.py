@@ -23,7 +23,7 @@ def test_format_alerts_message_returns_none_when_no_outcomes():
 def test_format_alerts_message_labels_league_and_week():
     outcomes = [AlertOutcome(alert=make_alert(AlertKind.AUTO), applied=True)]
     message = poller.format_alerts_message("ESPN", 3, outcomes, "https://example.com/team")
-    assert message.startswith("[ESPN] Week 3 lineup check")
+    assert message.startswith("[ESPN] Week 3")
 
 
 def test_format_alerts_message_separates_applied_unsupported_and_suggest():
@@ -33,17 +33,34 @@ def test_format_alerts_message_separates_applied_unsupported_and_suggest():
         AlertOutcome(alert=make_alert(AlertKind.SUGGEST, rule="questionable_doubtful"), applied=False),
     ]
     message = poller.format_alerts_message("Sleeper", 1, outcomes, "https://example.com/team")
-    assert "Auto-fix applied" in message
-    assert "Auto-fix candidates" in message
-    assert "Suggested" in message
-    assert message.index("Auto-fix applied") < message.index("Auto-fix candidates") < message.index("Suggested")
+    assert "Automated Fixes" in message
+    assert "Applied:" in message
+    assert "Not supported (write-path not built for this platform):" in message
+    assert "Suggested Fixes" in message
+    assert message.index("Applied:") < message.index("Not supported") < message.index("Suggested Fixes")
 
 
 def test_format_alerts_message_reports_failed_auto_alert():
     outcomes = [AlertOutcome(alert=make_alert(AlertKind.AUTO), applied=False, error="boom")]
     message = poller.format_alerts_message("ESPN", 3, outcomes, "https://example.com/team")
-    assert "Auto-fix FAILED" in message
+    assert "Failed to apply:" in message
     assert "boom" in message
+
+
+def test_format_alerts_message_numbers_multiple_alerts_in_a_section():
+    outcomes = [
+        AlertOutcome(alert=make_alert(AlertKind.SUGGEST, starter_name="A"), applied=False),
+        AlertOutcome(alert=make_alert(AlertKind.SUGGEST, starter_name="B"), applied=False),
+    ]
+    message = poller.format_alerts_message("ESPN", 3, outcomes, "https://example.com/team")
+    assert "1. WR: A ->" in message
+    assert "2. WR: B ->" in message
+
+
+def test_format_alerts_message_omits_automated_fixes_section_when_only_suggestions():
+    outcomes = [AlertOutcome(alert=make_alert(AlertKind.SUGGEST), applied=False)]
+    message = poller.format_alerts_message("ESPN", 3, outcomes, "https://example.com/team")
+    assert "Automated Fixes" not in message
 
 
 def test_format_alerts_message_includes_team_link():
