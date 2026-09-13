@@ -38,7 +38,7 @@ from typing import Callable
 
 from ff_lineup_alerts.decision_rules import Alert, AlertKind, run_all
 from ff_lineup_alerts.espn_client import EspnClient
-from ff_lineup_alerts.league import LeagueClient
+from ff_lineup_alerts.league import LeagueAuthError, LeagueClient
 from ff_lineup_alerts.logging_config import configure_logging
 from ff_lineup_alerts.sleeper_client import SleeperClient
 
@@ -154,8 +154,12 @@ def format_alerts_message(league_name: str, week: int, outcomes: list[AlertOutco
 
 
 def run_league_check(league: LeagueConfig) -> str | None:
-    client = league.build_client()
-    state = client.get_team_state()
+    try:
+        client = league.build_client()
+        state = client.get_team_state()
+    except LeagueAuthError as e:
+        logger.error("%s auth error: %s", league.name, e)
+        return f"[{league.name}] Could not connect: {e}"
     alerts = run_all(state)
     outcomes = _apply_auto_alerts(client, state.week, alerts)
     return format_alerts_message(league.name, state.week, outcomes, client.team_link)

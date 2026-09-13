@@ -6,7 +6,8 @@ instead (see README.md).
 """
 from ff_lineup_alerts import poller
 from ff_lineup_alerts.decision_rules import Alert, AlertKind
-from ff_lineup_alerts.poller import AlertOutcome
+from ff_lineup_alerts.league import LeagueAuthError
+from ff_lineup_alerts.poller import AlertOutcome, LeagueConfig
 
 
 def make_alert(kind, rule="some_rule", slot="WR", starter_name="Starter", replacement_name="Replacement"):
@@ -116,3 +117,12 @@ def test_configured_leagues_empty_when_none_set(monkeypatch):
     monkeypatch.delenv("ESPN_LEAGUE_ID", raising=False)
     monkeypatch.delenv("SLEEPER_LEAGUE_ID", raising=False)
     assert poller.configured_leagues() == []
+
+
+def test_run_league_check_reports_auth_error_as_message():
+    def build_client():
+        raise LeagueAuthError("ESPN_S2/ESPN_SWID have likely expired")
+
+    league = LeagueConfig(name="ESPN", build_client=build_client, required_env="ESPN_LEAGUE_ID")
+    message = poller.run_league_check(league)
+    assert message == "[ESPN] Could not connect: ESPN_S2/ESPN_SWID have likely expired"
