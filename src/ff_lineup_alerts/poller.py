@@ -119,10 +119,17 @@ def _apply_auto_alerts(client, week: int, alerts: list[Alert]) -> list[AlertOutc
     return outcomes
 
 
+SECTION_RULE = "=" * 20
+
+
 def _format_alert_line(alert: Alert) -> str:
     starter = alert.starter.name if alert.starter else "(empty slot)"
     replacement = alert.replacement.name if alert.replacement else "(no eligible replacement)"
-    return f"- {alert.slot}: {starter} -> {replacement} [{alert.reason}]"
+    return f"{alert.slot}: {starter} -> {replacement} [{alert.reason}]"
+
+
+def _numbered(outcomes: list[AlertOutcome], suffix=lambda o: "") -> list[str]:
+    return [f"{i}. {_format_alert_line(o.alert)}{suffix(o)}" for i, o in enumerate(outcomes, start=1)]
 
 
 def format_alerts_message(league_name: str, week: int, outcomes: list[AlertOutcome], team_link: str) -> str | None:
@@ -135,21 +142,23 @@ def format_alerts_message(league_name: str, week: int, outcomes: list[AlertOutco
     unsupported = [o for o in outcomes if o.alert.kind == AlertKind.AUTO and not o.applied and o.error is None]
     suggest = [o for o in outcomes if o.alert.kind == AlertKind.SUGGEST]
 
-    lines = [f"[{league_name}] Week {week} lineup check"]
-    if applied:
-        lines.append("\nAuto-fix applied:")
-        lines.extend(_format_alert_line(o.alert) for o in applied)
-    if failed:
-        lines.append("\nAuto-fix FAILED (needs manual action):")
-        lines.extend(f"{_format_alert_line(o.alert)} -- error: {o.error}" for o in failed)
-    if unsupported:
-        # e.g. Sleeper, which has no public write API to apply this through.
-        lines.append("\nAuto-fix candidates (this platform's write-path isn't built):")
-        lines.extend(_format_alert_line(o.alert) for o in unsupported)
+    lines = [f"[{league_name}] Week {week}"]
+
+    if applied or failed or unsupported:
+        lines += ["", SECTION_RULE, "Automated Fixes", SECTION_RULE]
+        if applied:
+            lines += ["", "Applied:"] + _numbered(applied)
+        if failed:
+            lines += ["", "Failed to apply:"] + _numbered(failed, lambda o: f" -- error: {o.error}")
+        if unsupported:
+            # e.g. Sleeper, which has no public write API to apply this through.
+            lines += ["", "Not supported (write-path not built for this platform):"] + _numbered(unsupported)
+
     if suggest:
-        lines.append("\nSuggested (tap-to-approve not wired up yet):")
-        lines.extend(_format_alert_line(o.alert) for o in suggest)
-    lines.append(f"\n{team_link}")
+        lines += ["", SECTION_RULE, "Suggested Fixes", SECTION_RULE, ""]
+        lines += _numbered(suggest)
+
+    lines += ["", team_link]
     return "\n".join(lines)
 
 
@@ -206,10 +215,15 @@ def main():
         for league in leagues:
             message = run_league_check(league)
             if message is None:
-                send_telegram_message(f"[TEST] {league.name} check ran -- no alerts right now.")
+                # TODO: real (non-test) checkpoints already stay fully silent
+                # when there's nothing to report (see below) -- once that's
+                # been trusted for a while, consider dropping this no-alerts
+                # confirmation here too rather than sending it on every
+                # --test run.
+                send_telegram_message(f"[{league.name}] No alerts right now.")
                 logger.info("Test %s check ran with no alerts.", league.name)
             else:
-                send_telegram_message(f"[TEST]\n{message}")
+                send_telegram_message(message)
                 logger.info("Test %s check sent alerts.", league.name)
         return
 
