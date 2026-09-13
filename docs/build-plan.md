@@ -47,16 +47,40 @@ moving to the next.
     dashboard is simpler and sufficient. Revisit only if call volume grows
     enough to matter.
 
+- **ESPN data client + decision rules** (`src/ff_lineup_alerts/espn_client.py`,
+  `src/ff_lineup_alerts/decision_rules.py`)
+  - ESPN goes first (Sleeper deferred): `espn-api`'s box-score lineup
+    (`BoxPlayer`, one entry per roster spot including bench/IR) already
+    carries week-specific `projected_points`, `on_bye_week`, and
+    `injuryStatus` directly — no client-side bye-week diffing or a second
+    projections endpoint needed, unlike Sleeper (see scope.md's Data
+    sources).
+  - All six rules from scope.md's Autonomy table implemented and verified
+    against synthetic `TeamState`s: starter-on-bye, starter Out/IR/Suspended,
+    empty slot, questionable/doubtful, and better-projected-on-bench (the
+    last with an optional `third_party_projection` callable hook, unwired,
+    for the independent-projection cross-check from scope.md's open
+    questions).
+  - Real-data run (`scripts/spike_decision_rules_espn.py`) confirms the
+    client pulls correct live projections/status/bye against the actual
+    league; no rules fired, which is correct for the current (clean) lineup
+    state — the rule logic itself is what the synthetic-state run verifies.
+  - Not yet exercised against a real bye/injury/questionable case (none
+    present in the live league right now) — revisit once one occurs
+    naturally, or consider a recorded-fixture test if that wait is too long.
+
 ## Plan
 
 1. **Data clients**
-   - ESPN + Sleeper clients pulling real roster/matchup/injury data for both
-     leagues.
+   - Sleeper client pulling real roster/matchup/injury data (ESPN's is done,
+     above). Sleeper's known extra complexity: bye weeks and projections come
+     from separate undocumented endpoints, and the 14MB player dump needs a
+     Railway Volume cache (see scope.md's open questions).
 2. **Decision rules**
-   - Implement the auto-fix / suggest-only rules already specified in
-     scope.md's Autonomy section, against real data from (1).
-   - Auto-fix sends an FYI; suggest-only sends tap buttons over the same
-     Telegram bot from the poller.
+   - ESPN-only implementation is done (above). Extend to Sleeper once its
+     client exists, or ship ESPN-only first if that unblocks value sooner.
+   - Wire alerts into the poller: auto-fix sends an FYI; suggest-only sends
+     tap buttons over the same Telegram bot.
 3. **Write-path**
    - Implement the "execute this swap" library function itself (the shared
      core-library action from scope.md's architecture) against ESPN/Sleeper's
