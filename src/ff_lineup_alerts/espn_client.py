@@ -48,7 +48,12 @@ def _to_roster_player(bp) -> RosterPlayer:
 class EspnClient:
     def __init__(self, league_id: int, year: int, espn_s2: str, swid: str, team_id: int):
         self.league = League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid)
+        self.league_id = league_id
         self.team_id = team_id
+
+    @property
+    def team_link(self) -> str:
+        return f"https://fantasy.espn.com/football/team?leagueId={self.league_id}&teamId={self.team_id}"
 
     @classmethod
     def from_env(cls) -> "EspnClient":

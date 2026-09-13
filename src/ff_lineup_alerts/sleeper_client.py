@@ -142,6 +142,10 @@ class SleeperClient:
             username=os.environ["SLEEPER_USERNAME"],
         )
 
+    @property
+    def team_link(self) -> str:
+        return f"https://sleeper.com/leagues/{self.league_id}/team"
+
     def get_team_state(self) -> TeamState:
         state = requests.get(f"{BASE}/state/nfl").json()
         current_week, season = state["week"], state["season"]
