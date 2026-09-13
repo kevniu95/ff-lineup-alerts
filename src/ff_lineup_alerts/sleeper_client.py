@@ -176,6 +176,7 @@ class SleeperClient:
                 has_played=game_status is not None and game_status != "pre_game",
                 projection=projections.get(player_id, 0) or 0,
                 eligible_slots=_eligible_slots_for(p.get("fantasy_positions"), roster_position_labels),
+                player_id=player_id,
             )
 
         lineup = []

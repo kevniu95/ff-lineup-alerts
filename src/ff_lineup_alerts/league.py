@@ -20,6 +20,7 @@ class RosterPlayer:
     has_played: bool  # this week's game is over (or well underway) for this player
     projection: float
     eligible_slots: list[str]  # this league's own slot labels the player qualifies for
+    player_id: str | None = None  # platform-native id, needed to actually execute a swap
 
 
 @dataclass

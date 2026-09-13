@@ -135,6 +135,33 @@ moving to the next.
     (`player=None`) itself — which is what `check_empty_slot` actually
     needs to fire correctly.
 
+- **ESPN write-path** (`EspnClient.apply_swap`, `scripts/spike_espn_write.py`)
+  - ESPN has no official write API; `espn_api` itself is read-only. The
+    endpoint used is undocumented and reverse-engineered from ESPN's own
+    web-app traffic (a third party's captured request was the source, not
+    ESPN docs) — could change or break without notice, and the only
+    contract is whatever ESPN's frontend also relies on:
+    `POST lm-api-writes.fantasy.espn.com/apis/v3/games/ffl/seasons/{year}/segments/0/leagues/{id}/transactions/`,
+    a `ROSTER` envelope of `LINEUP` items (`playerId`/`fromLineupSlotId`/
+    `toLineupSlotId`), authenticated by the same `espn_s2`/`SWID` cookies
+    already used for reads. Only writes to the league's *current* scoring
+    period are accepted.
+  - Verified against the real live league via `spike_espn_write.py` (finds
+    a real AUTO alert, requires a typed `yes` confirmation, then calls
+    `apply_swap` for real) before ever being wired into the poller.
+  - Sleeper has no public write API at all (its docs are explicit that it's
+    read-only) — `SleeperClient` has no `apply_swap`; poller.py checks for
+    the method's presence rather than assuming every platform can write.
+  - Poller's `AUTO` alerts are now executed immediately via
+    `client.apply_swap` when the client supports it, with the Telegram
+    message reflecting what actually happened (applied / failed / not
+    supported on this platform) instead of just proposing the swap.
+  - Along the way, also fixed a real regression: adding `team_link` to
+    `format_alerts_message` had broken `test_poller.py`'s calls without
+    anyone noticing until the next unrelated test run — a reminder to run
+    the suite after any signature change, not just before ending a
+    session.
+
 ## Plan
 
 1. **Data clients**
@@ -146,13 +173,10 @@ moving to the next.
      Telegram (above); tap-to-approve buttons still depend on step 4's
      webhook handler.
 3. **Write-path**
-   - Implement the "execute this swap" library function itself (the shared
-     core-library action from scope.md's architecture) against ESPN/Sleeper's
-     APIs.
-   - Test it standalone/scripted — no Telegram involved yet.
-     - Dry-run first.
-     - Then a low-stakes roster.
-     - Only then trust it on a league that actually matters.
+   - ESPN done (above), executed automatically for AUTO alerts. Sleeper has
+     no public write API to build this against at all -- revisit only if/
+     when its private mobile-app API gets reverse-engineered separately
+     (would need traffic capture from the phone app, not just API spelunking).
 4. **Interactive Telegram**
    - Stand up the webhook handler as a second, always-on Railway service —
      deferred from the deploy-skeleton work since there was nothing for it

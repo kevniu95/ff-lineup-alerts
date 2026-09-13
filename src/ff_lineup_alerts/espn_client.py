@@ -13,19 +13,35 @@ projected_total_points, and bye weeks would need deriving from .schedule).
 import logging
 import os
 
+import requests
 from espn_api.football import League
+from espn_api.football.constant import POSITION_MAP
 
 from ff_lineup_alerts.league import LineupSlot, RosterPlayer, TeamState
 
 logger = logging.getLogger("espn_client")
 
 BENCH_SLOTS = {"BE", "IR"}
+BENCH_SLOT = "BE"
 
 # ESPN's own injuryStatus strings already match league.py's canonical
 # vocabulary for player status ("ACTIVE", "OUT", "QUESTIONABLE", etc.) --
 # the one known exception is D/ST entries, which ESPN reports as "NORMAL"
 # rather than "ACTIVE".
 STATUS_MAP = {"NORMAL": "ACTIVE"}
+
+# espn_api's own POSITION_MAP is {int: label} plus a handful of {label: int}
+# shortcuts that don't cover every slot (e.g. "BE"/"IR"/compound flex names
+# are missing on the label->id side) -- build a complete reverse mapping
+# ourselves from just the int keys instead of relying on those extras.
+SLOT_TO_ID = {v: k for k, v in POSITION_MAP.items() if isinstance(k, int)}
+
+# Undocumented, reverse-engineered from ESPN's own web app traffic -- see
+# docs/scope.md's write-path notes. Could change or break without notice.
+TRANSACTIONS_URL = (
+    "https://lm-api-writes.fantasy.espn.com/apis/v3/games/ffl/seasons/{year}"
+    "/segments/0/leagues/{league_id}/transactions/"
+)
 
 
 def _normalize_status(raw_status: str) -> str:
@@ -42,6 +58,7 @@ def _to_roster_player(bp) -> RosterPlayer:
         has_played=bp.game_played >= 100,
         projection=bp.projected_points,
         eligible_slots=list(bp.eligibleSlots),
+        player_id=str(bp.playerId),
     )
 
 
@@ -49,6 +66,9 @@ class EspnClient:
     def __init__(self, league_id: int, year: int, espn_s2: str, swid: str, team_id: int):
         self.league = League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid)
         self.league_id = league_id
+        self.year = year
+        self.espn_s2 = espn_s2
+        self.swid = swid
         self.team_id = team_id
 
     @property
@@ -102,3 +122,57 @@ class EspnClient:
             current_week, len(lineup), len(bench),
         )
         return TeamState(week=current_week, lineup=lineup, bench=bench)
+
+    def apply_swap(
+        self,
+        week: int,
+        slot: str,
+        starter: RosterPlayer | None,
+        replacement: RosterPlayer,
+    ) -> dict:
+        """
+        Bench `starter` (if any -- an empty-slot alert has none) and start
+        `replacement` in `slot`, via ESPN's undocumented lineup-transaction
+        endpoint (see TRANSACTIONS_URL). scoringPeriodId must be the league's
+        *current* week -- ESPN rejects writes for any other week.
+        """
+        slot_id = SLOT_TO_ID[slot]
+        bench_id = SLOT_TO_ID[BENCH_SLOT]
+
+        items = []
+        if starter is not None:
+            items.append({
+                "playerId": int(starter.player_id),
+                "type": "LINEUP",
+                "fromLineupSlotId": slot_id,
+                "toLineupSlotId": bench_id,
+            })
+        items.append({
+            "playerId": int(replacement.player_id),
+            "type": "LINEUP",
+            "fromLineupSlotId": bench_id,
+            "toLineupSlotId": slot_id,
+        })
+
+        body = {
+            "isLeagueManager": False,
+            "teamId": self.team_id,
+            "type": "ROSTER",
+            "memberId": self.swid,
+            "scoringPeriodId": week,
+            "executionType": "EXECUTE",
+            "items": items,
+        }
+        url = TRANSACTIONS_URL.format(year=self.year, league_id=self.league_id)
+        resp = requests.post(
+            url,
+            json=body,
+            cookies={"SWID": self.swid, "espn_s2": self.espn_s2},
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        logger.info(
+            "Applied ESPN swap: slot=%s starter=%s replacement=%s status=%s",
+            slot, starter.name if starter else None, replacement.name, result.get("status"),
+        )
+        return result
