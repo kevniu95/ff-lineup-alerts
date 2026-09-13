@@ -8,6 +8,7 @@ Each rule returns a list of Alert. Auto-fix alerts are informational (the
 swap already happened, or would happen, by the time this fires); suggest
 alerts always carry the candidate replacement for a tap to approve.
 """
+
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -40,10 +41,11 @@ class Alert:
     reason: str
 
 
-def _eligible_bench_candidates(slot: LineupSlot, bench: list[RosterPlayer]) -> list[RosterPlayer]:
+def _eligible_bench_candidates(
+    slot: LineupSlot, bench: list[RosterPlayer]
+) -> list[RosterPlayer]:
     return [
-        b for b in bench
-        if slot.slot in b.eligible_slots and (b.projection or 0) > 0
+        b for b in bench if slot.slot in b.eligible_slots and (b.projection or 0) > 0
     ]
 
 
@@ -61,14 +63,16 @@ def check_starter_on_bye(state: TeamState) -> list[Alert]:
         candidate = _best_candidate(_eligible_bench_candidates(slot, state.bench))
         if candidate is None:
             continue
-        alerts.append(Alert(
-            kind=AlertKind.AUTO,
-            rule="starter_on_bye",
-            slot=slot.slot,
-            starter=slot.player,
-            replacement=candidate,
-            reason=f"{slot.player.name} is on bye week {state.week}",
-        ))
+        alerts.append(
+            Alert(
+                kind=AlertKind.AUTO,
+                rule="starter_on_bye",
+                slot=slot.slot,
+                starter=slot.player,
+                replacement=candidate,
+                reason=f"{slot.player.name} is on bye week {state.week}",
+            )
+        )
     return alerts
 
 
@@ -85,14 +89,16 @@ def check_starter_out(state: TeamState) -> list[Alert]:
         candidate = _best_candidate(_eligible_bench_candidates(slot, state.bench))
         if candidate is None:
             continue
-        alerts.append(Alert(
-            kind=AlertKind.AUTO,
-            rule="starter_out",
-            slot=slot.slot,
-            starter=slot.player,
-            replacement=candidate,
-            reason=f"{slot.player.name} status is {slot.player.status}",
-        ))
+        alerts.append(
+            Alert(
+                kind=AlertKind.AUTO,
+                rule="starter_out",
+                slot=slot.slot,
+                starter=slot.player,
+                replacement=candidate,
+                reason=f"{slot.player.name} status is {slot.player.status}",
+            )
+        )
     return alerts
 
 
@@ -102,14 +108,16 @@ def check_empty_slot(state: TeamState) -> list[Alert]:
         if slot.player is not None:
             continue
         candidate = _best_candidate(_eligible_bench_candidates(slot, state.bench))
-        alerts.append(Alert(
-            kind=AlertKind.AUTO,
-            rule="empty_slot",
-            slot=slot.slot,
-            starter=None,
-            replacement=candidate,
-            reason="Starting slot has no player assigned",
-        ))
+        alerts.append(
+            Alert(
+                kind=AlertKind.AUTO,
+                rule="empty_slot",
+                slot=slot.slot,
+                starter=None,
+                replacement=candidate,
+                reason="Starting slot has no player assigned",
+            )
+        )
     return alerts
 
 
@@ -121,14 +129,16 @@ def check_questionable_doubtful(state: TeamState) -> list[Alert]:
         if slot.player.has_played:
             continue
         candidate = _best_candidate(_eligible_bench_candidates(slot, state.bench))
-        alerts.append(Alert(
-            kind=AlertKind.SUGGEST,
-            rule="questionable_doubtful",
-            slot=slot.slot,
-            starter=slot.player,
-            replacement=candidate,
-            reason=f"{slot.player.name} status is {slot.player.status}",
-        ))
+        alerts.append(
+            Alert(
+                kind=AlertKind.SUGGEST,
+                rule="questionable_doubtful",
+                slot=slot.slot,
+                starter=slot.player,
+                replacement=candidate,
+                reason=f"{slot.player.name} status is {slot.player.status}",
+            )
+        )
     return alerts
 
 
@@ -153,7 +163,10 @@ def check_better_projected_bench(
             continue
         starter_proj = slot.player.projection or 0
         candidate = _best_candidate(_eligible_bench_candidates(slot, state.bench))
-        if candidate is None or (candidate.projection or 0) < starter_proj + PROJECTION_MARGIN:
+        if (
+            candidate is None
+            or (candidate.projection or 0) < starter_proj + PROJECTION_MARGIN
+        ):
             continue
         if third_party_projection is not None:
             third_party_candidate = third_party_projection(candidate.name)
@@ -162,17 +175,19 @@ def check_better_projected_bench(
                 continue
             if third_party_candidate < third_party_starter + PROJECTION_MARGIN:
                 continue
-        alerts.append(Alert(
-            kind=AlertKind.SUGGEST,
-            rule="better_projected_bench",
-            slot=slot.slot,
-            starter=slot.player,
-            replacement=candidate,
-            reason=(
-                f"{candidate.name} projected {candidate.projection:.1f} vs "
-                f"{slot.player.name} projected {starter_proj:.1f}"
-            ),
-        ))
+        alerts.append(
+            Alert(
+                kind=AlertKind.SUGGEST,
+                rule="better_projected_bench",
+                slot=slot.slot,
+                starter=slot.player,
+                replacement=candidate,
+                reason=(
+                    f"{candidate.name} projected {candidate.projection:.1f} vs "
+                    f"{slot.player.name} projected {starter_proj:.1f}"
+                ),
+            )
+        )
     return alerts
 
 
