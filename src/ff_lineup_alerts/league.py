@@ -38,3 +38,13 @@ class TeamState:
 
 class LeagueClient(Protocol):
     def get_team_state(self) -> TeamState: ...
+
+
+class LeagueAuthError(Exception):
+    """
+    Raised by a client's construction (or first real request) when the
+    platform rejects its credentials -- e.g. ESPN's espn_s2/SWID cookies
+    have expired. Platform-neutral so poller.py can catch one thing
+    regardless of which client raised it, per docs/scope.md's "How ESPN
+    cookie refresh gets triggered/reminded" open question.
+    """

@@ -16,8 +16,9 @@ import os
 import requests
 from espn_api.football import League
 from espn_api.football.constant import POSITION_MAP
+from espn_api.requests.espn_requests import ESPNAccessDenied, ESPNInvalidLeague
 
-from ff_lineup_alerts.league import LineupSlot, RosterPlayer, TeamState
+from ff_lineup_alerts.league import LeagueAuthError, LineupSlot, RosterPlayer, TeamState
 
 logger = logging.getLogger("espn_client")
 
@@ -64,7 +65,17 @@ def _to_roster_player(bp) -> RosterPlayer:
 
 class EspnClient:
     def __init__(self, league_id: int, year: int, espn_s2: str, swid: str, team_id: int):
-        self.league = League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid)
+        # espn_api's League() constructor eagerly fetches the league (auth
+        # happens right here, not lazily on first real call).
+        try:
+            self.league = League(league_id=league_id, year=year, espn_s2=espn_s2, swid=swid)
+        except ESPNAccessDenied as e:
+            raise LeagueAuthError(
+                f"ESPN rejected credentials for league {league_id} -- ESPN_S2/ESPN_SWID "
+                f"have likely expired and need refreshing from a browser session: {e}"
+            ) from e
+        except ESPNInvalidLeague as e:
+            raise LeagueAuthError(f"ESPN league {league_id} not found -- check ESPN_LEAGUE_ID: {e}") from e
         self.league_id = league_id
         self.year = year
         self.espn_s2 = espn_s2

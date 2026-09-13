@@ -39,7 +39,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "ff_lineup_alerts.poller",
-            "args": ["--test=sleeper"],
+            "args": ["--test=check"],
             "python": "${workspaceFolder}/.venv/bin/python",
             "cwd": "${workspaceFolder}",
             "envFile": "${workspaceFolder}/.env",
