@@ -89,6 +89,9 @@ def _cache_is_fresh() -> bool:
 def _load_players() -> dict:
     """~14MB static file Sleeper asks not be pulled more than once/day."""
     if _cache_is_fresh():
+        fetched_at = datetime.fromisoformat(json.loads(PLAYERS_CACHE_META.read_text())["fetched_at"])
+        age = datetime.now(timezone.utc) - fetched_at
+        logger.debug("Sleeper player cache hit (age=%s, path=%s)", age, PLAYERS_CACHE)
         return json.loads(PLAYERS_CACHE.read_text())
 
     logger.info("Sleeper player cache missing or stale, re-fetching from %s", CACHE_DIR)
