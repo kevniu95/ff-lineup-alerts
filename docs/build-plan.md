@@ -69,6 +69,33 @@ moving to the next.
     present in the live league right now) — revisit once one occurs
     naturally, or consider a recorded-fixture test if that wait is too long.
 
+- **League interface + Sleeper client** (`src/ff_lineup_alerts/league.py`,
+  `src/ff_lineup_alerts/sleeper_client.py`)
+  - Built earlier than originally planned: normalizing Sleeper's raw
+    `injury_status` strings (`"Out"`, `"IR"`, `"Sus"`, plus edge values like
+    `PUP`/`NA`/`DNR`/`COV`) into something `decision_rules.py` could compare
+    against ESPN's (`"OUT"`, `"INJURY_RESERVE"`, ...) needed a shared
+    canonical vocabulary regardless of whether the poller looped over
+    multiple leagues yet — so `TeamState`/`LineupSlot`/`RosterPlayer` and a
+    `LeagueClient` protocol moved out of `espn_client.py` into `league.py`,
+    and both clients now normalize into it.
+  - `sleeper_client.py` covers bye/status/projections/lineup/eligibility and
+    a real `has_played` signal (Sleeper's schedule endpoint has a per-game
+    `status` field — `"pre_game"` vs. anything else — cleaner than the
+    date-only approximation originally expected to be needed).
+  - PUP/NA/DNR/COV → OUT-equivalent status bucketing and the flex-slot
+    eligibility map (FLEX/SUPER_FLEX/WRRB_FLEX/REC_FLEX) were reviewed and
+    confirmed good enough as-is — no longer TODOs.
+  - Player-cache path is Volume-aware: reads `RAILWAY_VOLUME_MOUNT_PATH`
+    (which Railway sets automatically once a Volume is attached to the
+    poller service, whatever mount path is chosen) and falls back to a
+    local `data/cache/` dir otherwise; a sidecar timestamp file gates
+    re-fetching the 14MB dump to once/24h. See scope.md's open questions —
+    the only remaining step is creating + attaching the Volume in Railway's
+    dashboard; no further code changes needed.
+  - Verified against real Sleeper data via
+    `scripts/spike_decision_rules_sleeper.py` (mirrors the ESPN spike).
+
 ## Plan
 
 1. **Data clients**

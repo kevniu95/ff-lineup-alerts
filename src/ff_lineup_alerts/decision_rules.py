@@ -1,7 +1,8 @@
 """
 Decision rules from docs/scope.md's Autonomy section, evaluated against a
-TeamState (see espn_client.py). ESPN-only for now — see scope.md for why
-ESPN goes first.
+TeamState (see league.py) -- platform-neutral by construction, since every
+league client normalizes into the same RosterPlayer/LineupSlot/TeamState
+shape and the same canonical status vocabulary (see league.py).
 
 Each rule returns a list of Alert. Auto-fix alerts are informational (the
 swap already happened, or would happen, by the time this fires); suggest
@@ -11,7 +12,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 
-from ff_lineup_alerts.espn_client import LineupSlot, RosterPlayer, TeamState
+from ff_lineup_alerts.league import LineupSlot, RosterPlayer, TeamState
 
 logger = logging.getLogger("decision_rules")
 

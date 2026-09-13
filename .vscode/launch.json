@@ -11,6 +11,17 @@
             "envFile": "${workspaceFolder}/.env",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "Spike: Sleeper decision rules",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/spike_decision_rules_sleeper.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ]
 }

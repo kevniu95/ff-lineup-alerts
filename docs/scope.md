@@ -105,16 +105,17 @@ Sleeper, `python-telegram-bot` for the bot side, an LLM API for open-chat.
   projection models) as a simpler proxy. Not yet decided whether this becomes
   a hard requirement or a nice-to-have cross-check. Revisit when implementing
   rule (2) from build-plan.md.
-- **Sleeper player-data caching under Railway's cron model.** Sleeper's
-  `/v1/players/nfl` player-metadata dump is ~14MB and Sleeper asks it not be
-  pulled more than once/day. But Railway cron-scheduled services spin up a
-  fresh container per firing — there's no long-lived process, so a plain
-  local-file cache would be wiped between every checkpoint, not just across
-  redeploys. Current leaning: use a **Railway Volume** attached to the poller
-  service so the cache file (+ a last-fetched timestamp) survives across cron
-  firings, rather than pushing the cache to external storage or just eating
-  the re-pull cost every run. Revisit once the Sleeper client is actually
-  being built.
+- **Sleeper player-data caching under Railway's cron model — implemented,
+  one manual step left.** `sleeper_client.py`'s cache path reads
+  `RAILWAY_VOLUME_MOUNT_PATH` (an env var Railway sets automatically for any
+  service with an attached Volume, pointing at whatever mount path was
+  chosen in the dashboard — the code needs no hardcoded volume name/path)
+  and falls back to a local `data/cache/` dir when that's unset, which is
+  what happens today since no Volume is attached yet. A sidecar
+  `sleeper_players.meta.json` timestamp gates re-fetching to once/24h. The
+  only remaining step is manual: create a Volume in Railway's dashboard and
+  attach it to the poller service (any mount path works) — no further code
+  changes needed once that's done.
 - Precise auto-fix eligibility-checking logic (slot compatibility rules per
   platform).
 - How ESPN cookie refresh gets triggered/reminded (manual for now).
